@@ -27,6 +27,9 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body);
 
+    // Always enforce the correct model — ignore whatever the client sends
+    body.model = 'claude-sonnet-4-6';
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
