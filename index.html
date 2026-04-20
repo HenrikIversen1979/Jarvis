@@ -477,8 +477,6 @@
 </div>
 
 <script>
-  // All API calls go through /.netlify/functions/claude (serverless proxy)
-  // API key is stored as ANTHROPIC_API_KEY environment variable in Netlify — never in the browser
   const PROXY_URL = '/.netlify/functions/claude';
 
   let listening = false, processing = false, speaking = false;
@@ -486,13 +484,29 @@
   let history = [], silTimer = null, vadOn = false;
   let settings = { rate: 1.0, pitch: 0.9, silence: 1800, lang: 'en-US', tts: true, autoListen: false, showInterim: true };
   let allVoices = [], selectedVoice = null;
+  let iosSpeechUnlocked = false;
 
-  // Init audio and voices on first user interaction (required by browsers)
-  document.getElementById('cbtn').addEventListener('click', () => {
-    if (!actx) initAudio();
-  }, { once: true });
+  // iOS requires AudioContext AND speechSynthesis to be unlocked inside a direct tap handler
+  // Must happen synchronously before any async work
+  function iosUnlock() {
+    if (!actx) {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = actx.createAnalyser(); analyser.fftSize = 256;
+      drawSpec();
+      populateVoices();
+    }
+    if (actx.state === 'suspended') actx.resume();
+    // Pre-warm speechSynthesis with a zero-volume utterance — iOS blocks speak() in async callbacks
+    if (!iosSpeechUnlocked && window.speechSynthesis) {
+      const silent = new SpeechSynthesisUtterance(' ');
+      silent.volume = 0; silent.rate = 2;
+      window.speechSynthesis.speak(silent);
+      iosSpeechUnlocked = true;
+    }
+  }
 
   function initAudio() {
+    if (actx) return;
     actx = new (window.AudioContext || window.webkitAudioContext)();
     analyser = actx.createAnalyser(); analyser.fftSize = 256;
     drawSpec();
@@ -593,7 +607,8 @@
   function stopMic() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
 
   function toggleListen() {
-    if (!actx) initAudio();
+    // Must call iosUnlock synchronously inside the tap handler before any async code
+    iosUnlock();
     if (speaking) { stopSpeech(); return; }
     if (listening || processing) { stopAll(); return; }
     startListening();
@@ -604,28 +619,63 @@
     listening = true; setStatus('listening', 'Listening...'); setBtnState('listening', '🎙', 'Active');
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { setStatus('error', 'Use Chrome or Safari'); return; }
-    recog = new SR(); recog.continuous = true; recog.interimResults = true; recog.lang = settings.lang;
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     let final = '';
-    recog.onresult = (e) => {
-      vadOn = true; clearTimeout(silTimer);
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
-        else interim = e.results[i][0].transcript;
-      }
-      if (settings.showInterim) document.getElementById('interim').textContent = interim ? '› ' + interim : '';
-      silTimer = setTimeout(() => {
-        if (final.trim()) {
+    let recogActive = false;
+
+    function startRecog() {
+      if (!listening) return;
+      recog = new SR();
+      // iOS Safari does not reliably support continuous mode — use single-shot with aggressive restart
+      recog.continuous = !isIOS;
+      recog.interimResults = !isIOS; // iOS ignores interimResults anyway
+      recog.lang = settings.lang;
+      recog.onstart = () => { recogActive = true; };
+      recog.onresult = (e) => {
+        vadOn = true; clearTimeout(silTimer);
+        let interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
+          else interim = e.results[i][0].transcript;
+        }
+        if (settings.showInterim && !isIOS) document.getElementById('interim').textContent = interim ? '› ' + interim : '';
+        // On iOS fire immediately on final result; on desktop wait for silence
+        if (isIOS && final.trim()) {
           const t = final.trim(); final = ''; vadOn = false;
-          recog.stop(); listening = false;
+          listening = false; recogActive = false;
           document.getElementById('interim').textContent = '';
           processQuery(t);
+          return;
         }
-      }, settings.silence);
-    };
-    recog.onerror = (e) => { if (e.error !== 'aborted') { setStatus('error', e.error); listening = false; stopMic(); } };
-    recog.onend = () => { vadOn = false; if (listening) { try { recog.start(); } catch (e) {} } };
-    recog.start();
+        silTimer = setTimeout(() => {
+          if (final.trim()) {
+            const t = final.trim(); final = ''; vadOn = false;
+            recog.stop(); listening = false;
+            document.getElementById('interim').textContent = '';
+            processQuery(t);
+          }
+        }, settings.silence);
+      };
+      recog.onerror = (e) => {
+        recogActive = false;
+        if (e.error === 'aborted' || e.error === 'no-speech') {
+          // iOS fires no-speech frequently — just restart
+          if (listening) setTimeout(startRecog, 200);
+          return;
+        }
+        setStatus('error', e.error); listening = false; stopMic();
+      };
+      recog.onend = () => {
+        recogActive = false;
+        vadOn = false;
+        // Always restart while still in listening mode (critical for iOS)
+        if (listening) setTimeout(startRecog, 150);
+      };
+      try { recog.start(); } catch(e) { if (listening) setTimeout(startRecog, 300); }
+    }
+
+    startRecog();
   }
 
   async function processQuery(text) {
@@ -655,10 +705,27 @@
   function speakReply(text) {
     processing = false; speaking = true; setStatus('speaking', 'Speaking...'); setBtnState('speaking', '🔊', 'Speaking');
     window.speechSynthesis.cancel();
+
     const u = new SpeechSynthesisUtterance(text);
     u.rate = settings.rate; u.pitch = settings.pitch; u.volume = 1;
     if (selectedVoice) u.voice = selectedVoice;
     u.onend = () => { speaking = false; afterSpeak(); };
+    u.onerror = () => { speaking = false; afterSpeak(); };
+
+    // iOS Safari watchdog: speechSynthesis can stall silently after ~15s
+    // Pause/resume trick keeps it alive
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    let watchdog;
+    if (isIOS) {
+      watchdog = setInterval(() => {
+        if (!speaking) { clearInterval(watchdog); return; }
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }, 10000);
+      u.onend = () => { clearInterval(watchdog); speaking = false; afterSpeak(); };
+      u.onerror = () => { clearInterval(watchdog); speaking = false; afterSpeak(); };
+    }
+
     window.speechSynthesis.speak(u);
   }
 
@@ -673,7 +740,9 @@
   }
 
   function stopAll() {
-    window.speechSynthesis?.cancel(); recog?.stop(); clearTimeout(silTimer);
+    window.speechSynthesis?.cancel(); 
+    try { recog?.stop(); recog?.abort(); } catch(e) {}
+    clearTimeout(silTimer);
     listening = false; processing = false; speaking = false; vadOn = false; stopMic();
     document.getElementById('interim').textContent = '';
     setStatus('standby', 'Standby — tap orb'); setBtnState('standby', '🎙', 'Ready');
