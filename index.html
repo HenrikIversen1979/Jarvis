@@ -409,27 +409,76 @@
     <div class="panel-title">Voice Settings</div>
 
     <div class="setting-row">
-      <label>Voice <span id="voiceNameDisplay">—</span></label>
-      <select id="voiceSelect" onchange="applyVoice()"></select>
+      <label>Voice engine</label>
+      <select id="engineSelect" onchange="applyEngine()">
+        <option value="elevenlabs">ElevenLabs — natural AI voice</option>
+        <option value="browser">Browser — device voice (fallback)</option>
+      </select>
+    </div>
+
+    <div id="elSection">
+      <div class="divider"></div>
+      <div class="setting-row">
+        <label>ElevenLabs voice <span id="elVoiceDisplay">Daniel</span></label>
+        <select id="elVoiceSelect" onchange="applyElVoice()">
+          <option value="onwK4e9ZLuTAKqWW03F9">Daniel — British, calm, authoritative</option>
+          <option value="N2lVS1w4EtoT3dr4eOWO">Callum — British, intense</option>
+          <option value="IKne3meq5aSn9XLyUdCD">Charlie — Australian, natural</option>
+          <option value="XB0fDUnXU5powFXDhCwa">Charlotte — British, seductive</option>
+          <option value="pqHfZKP75CvOlQylNhV4">Bill — American, deep</option>
+          <option value="nPczCjzI2devNBz1zQrb">Brian — American, deep, narrative</option>
+          <option value="iP95p4xoKVk53GoZ742B">Chris — American, casual</option>
+          <option value="cjVigY5qzO86Huf0OWal">Eric — American, friendly</option>
+          <option value="JBFqnCBsd6RMkjVDRZzb">George — British, warm</option>
+          <option value="cgSgspJ2msm6clMCkdW9">Jessica — American, expressive</option>
+          <option value="FGY2WhTYpPnrIDTdsKH5">Laura — American, upbeat</option>
+          <option value="TX3LPaxmHKxFdv7VOQHJ">Liam — American, neutral</option>
+          <option value="XrExE9yKIg1WjnnlVkGX">Matilda — American, warm</option>
+          <option value="SAz9YHcvj6GT2YYXdXww">River — American, calm, non-binary</option>
+          <option value="CwhRBWXzGAHq8TQ4Fs17">Roger — American, confident</option>
+          <option value="EXAVITQu4vr4xnSDxMaL">Sarah — American, soft</option>
+          <option value="bIHbv24MWmeRgasZH58o">Will — American, friendly</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label>Stability <span id="stabilityVal">0.5</span></label>
+        <div class="slider-track" id="stabilityTrack">
+          <div class="slider-fill" id="stabilityFill" style="width:50%"></div>
+          <div class="slider-thumb" id="stabilityThumb" style="left:50%"></div>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label>Clarity <span id="similarityVal">0.75</span></label>
+        <div class="slider-track" id="similarityTrack">
+          <div class="slider-fill" id="similarityFill" style="width:75%"></div>
+          <div class="slider-thumb" id="similarityThumb" style="left:75%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="browserSection" style="display:none">
+      <div class="divider"></div>
+      <div class="setting-row">
+        <label>Device voice <span id="voiceNameDisplay">—</span></label>
+        <select id="voiceSelect" onchange="applyVoice()"></select>
+      </div>
+      <div class="setting-row">
+        <label>Speech rate <span id="rateVal">1.0×</span></label>
+        <div class="slider-track" id="rateTrack">
+          <div class="slider-fill" id="rateFill" style="width:33%"></div>
+          <div class="slider-thumb" id="rateThumb" style="left:33%"></div>
+        </div>
+      </div>
+      <div class="setting-row">
+        <label>Pitch <span id="pitchVal">0.9</span></label>
+        <div class="slider-track" id="pitchTrack">
+          <div class="slider-fill" id="pitchFill" style="width:40%"></div>
+          <div class="slider-thumb" id="pitchThumb" style="left:40%"></div>
+        </div>
+      </div>
     </div>
 
     <div class="divider"></div>
-
-    <div class="setting-row">
-      <label>Speech rate <span id="rateVal">1.0×</span></label>
-      <div class="slider-track" id="rateTrack">
-        <div class="slider-fill" id="rateFill" style="width:33%"></div>
-        <div class="slider-thumb" id="rateThumb" style="left:33%"></div>
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <label>Pitch <span id="pitchVal">0.9</span></label>
-      <div class="slider-track" id="pitchTrack">
-        <div class="slider-fill" id="pitchFill" style="width:40%"></div>
-        <div class="slider-thumb" id="pitchThumb" style="left:40%"></div>
-      </div>
-    </div>
 
     <div class="setting-row">
       <label>Silence threshold <span id="silVal">1.8s</span></label>
@@ -438,8 +487,6 @@
         <div class="slider-thumb" id="silThumb" style="left:37%"></div>
       </div>
     </div>
-
-    <div class="divider"></div>
 
     <div class="setting-row">
       <label>Recognition language</label>
@@ -482,7 +529,14 @@
   let listening = false, processing = false, speaking = false;
   let stream = null, actx = null, analyser = null, recog = null;
   let history = [], silTimer = null, vadOn = false;
-  let settings = { rate: 1.0, pitch: 0.9, silence: 1800, lang: 'en-US', tts: true, autoListen: false, showInterim: true };
+  let settings = {
+    engine: 'elevenlabs',
+    elVoiceId: 'onwK4e9ZLuTAKqWW03F9',
+    elStability: 0.5,
+    elSimilarity: 0.75,
+    rate: 1.0, pitch: 0.9, silence: 1800,
+    lang: 'en-US', tts: true, autoListen: false, showInterim: true
+  };
   let allVoices = [], selectedVoice = null;
   let iosSpeechUnlocked = false;
 
@@ -534,6 +588,19 @@
     window.speechSynthesis.onvoiceschanged = load;
   }
 
+  function applyEngine() {
+    settings.engine = document.getElementById('engineSelect').value;
+    document.getElementById('elSection').style.display = settings.engine === 'elevenlabs' ? 'flex' : 'none';
+    document.getElementById('browserSection').style.display = settings.engine === 'browser' ? 'flex' : 'none';
+    if (settings.engine === 'browser') populateVoices();
+  }
+
+  function applyElVoice() {
+    const sel = document.getElementById('elVoiceSelect');
+    settings.elVoiceId = sel.value;
+    document.getElementById('elVoiceDisplay').textContent = sel.options[sel.selectedIndex].text.split('—')[0].trim();
+  }
+
   function applyVoice() {
     const i = parseInt(document.getElementById('voiceSelect').value);
     selectedVoice = allVoices[i]; updateVoiceDisplay();
@@ -553,7 +620,7 @@
     const show = p.style.display === 'none';
     p.style.display = show ? 'flex' : 'none';
     b.className = show ? 'cb active-btn' : 'cb';
-    if (show) populateVoices();
+    if (show && settings.engine === 'browser') populateVoices();
   }
   function toggleTTS() { const t = document.getElementById('ttsToggle'); settings.tts = !settings.tts; t.className = 'toggle' + (settings.tts ? ' on' : ''); }
   function toggleAuto() { const t = document.getElementById('autoToggle'); settings.autoListen = !settings.autoListen; t.className = 'toggle' + (settings.autoListen ? ' on' : ''); }
@@ -567,6 +634,7 @@
     const track = document.getElementById(trackId);
     const fill = document.getElementById(fillId);
     const thumb = document.getElementById(thumbId);
+    if (!track) return;
     function update(clientX) {
       const rect = track.getBoundingClientRect();
       const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
@@ -584,6 +652,14 @@
     track.addEventListener('click', e => update(e.clientX));
   }
 
+  initSlider('stabilityTrack', 'stabilityFill', 'stabilityThumb', 0, 1, (v) => {
+    settings.elStability = +v.toFixed(2);
+    document.getElementById('stabilityVal').textContent = settings.elStability.toFixed(2);
+  });
+  initSlider('similarityTrack', 'similarityFill', 'similarityThumb', 0, 1, (v) => {
+    settings.elSimilarity = +v.toFixed(2);
+    document.getElementById('similarityVal').textContent = settings.elSimilarity.toFixed(2);
+  });
   initSlider('rateTrack', 'rateFill', 'rateThumb', 0.5, 2.0, (v) => {
     settings.rate = +v.toFixed(1);
     document.getElementById('rateVal').textContent = settings.rate.toFixed(1) + '×';
@@ -702,18 +778,50 @@
     } catch (e) { setStatus('error', 'Error: ' + e.message); processing = false; setBtnState('standby', '🎙', 'Ready'); }
   }
 
-  function speakReply(text) {
+  async function speakReply(text) {
     processing = false; speaking = true; setStatus('speaking', 'Speaking...'); setBtnState('speaking', '🔊', 'Speaking');
-    window.speechSynthesis.cancel();
 
+    if (settings.engine === 'elevenlabs') {
+      try {
+        const r = await fetch('/.netlify/functions/elevenlabs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            voiceId: settings.elVoiceId,
+            stability: settings.elStability,
+            similarity: settings.elSimilarity,
+          })
+        });
+        const d = await r.json();
+        if (d.audio) {
+          // Decode base64 to ArrayBuffer and play via Web Audio — works on iOS
+          const binary = atob(d.audio);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const audioBuffer = await actx.decodeAudioData(bytes.buffer);
+          const source = actx.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(actx.destination);
+          source.onended = () => { speaking = false; afterSpeak(); };
+          source.start(0);
+          return;
+        } else {
+          // ElevenLabs failed — fall through to browser TTS
+          console.warn('ElevenLabs error, falling back:', d.error);
+        }
+      } catch (e) {
+        console.warn('ElevenLabs fetch failed, falling back:', e);
+      }
+    }
+
+    // Browser TTS (fallback or selected engine)
+    window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = settings.rate; u.pitch = settings.pitch; u.volume = 1;
     if (selectedVoice) u.voice = selectedVoice;
-    u.onend = () => { speaking = false; afterSpeak(); };
     u.onerror = () => { speaking = false; afterSpeak(); };
 
-    // iOS Safari watchdog: speechSynthesis can stall silently after ~15s
-    // Pause/resume trick keeps it alive
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     let watchdog;
     if (isIOS) {
@@ -724,8 +832,9 @@
       }, 10000);
       u.onend = () => { clearInterval(watchdog); speaking = false; afterSpeak(); };
       u.onerror = () => { clearInterval(watchdog); speaking = false; afterSpeak(); };
+    } else {
+      u.onend = () => { speaking = false; afterSpeak(); };
     }
-
     window.speechSynthesis.speak(u);
   }
 
@@ -735,7 +844,10 @@
   }
 
   function stopSpeech() {
-    window.speechSynthesis?.cancel(); speaking = false;
+    window.speechSynthesis?.cancel();
+    // Stop any playing Web Audio (ElevenLabs)
+    try { actx?.suspend().then(() => actx?.resume()); } catch(e) {}
+    speaking = false;
     setStatus('standby', 'Ready — tap orb'); setBtnState('standby', '🎙', 'Ready');
   }
 
