@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>J.A.R.V.I.S — AI Voice Interface</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@300;400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #020b18;
+      color: #a8d4f5;
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-x: hidden;
+    }
+
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(30,100,200,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30,100,200,.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+      pointer-events: none;
+    }
+
+    .wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 420px;
+      padding: 24px 20px 36px;
+      gap: 16px;
+      z-index: 10;
+    }
+
+    .hdr { text-align: center; }
+    .hdr-sub {
+      font-family: 'Orbitron', monospace;
+      font-size: 9px;
+      font-weight: 300;
+      color: #2a5a9a;
+      letter-spacing: .5em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .hdr-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 26px;
+      font-weight: 700;
+      color: #e8f4ff;
+      letter-spacing: .25em;
+    }
+
+    .api-wrap { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+    .api-input {
+      width: 100%;
+      background: rgba(5,20,50,.9);
+      border: .5px solid rgba(30,100,200,.35);
+      border-radius: 8px;
+      color: #8ab8e8;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 13px;
+      padding: 13px 14px;
+      outline: none;
+      letter-spacing: .05em;
+    }
+    .api-input:focus { border-color: #3a7bd5; }
+    .api-input::placeholder { color: #1e3060; }
+
+    .api-btn {
+      width: 100%;
+      background: rgba(20,60,140,.4);
+      border: .5px solid rgba(58,123,213,.5);
+      border-radius: 8px;
+      color: #5a9ae8;
+      font-family: 'Orbitron', monospace;
+      font-size: 10px;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      padding: 14px;
+      cursor: pointer;
+      transition: all .2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .api-btn:active { background: rgba(30,80,180,.5); }
+
+    .note {
+      font-size: 11px;
+      color: #1e4080;
+      text-align: center;
+      letter-spacing: .1em;
+      line-height: 1.6;
+      max-width: 340px;
+    }
+    .note.ok { color: #3a7bd5; }
+    .note.err { color: #c04040; }
+
+    .orb-wrap {
+      position: relative;
+      width: 210px;
+      height: 210px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .ring-outer {
+      position: absolute;
+      width: 196px;
+      height: 196px;
+      border-radius: 50%;
+      border: 1px solid rgba(30,100,200,.2);
+      animation: rot 20s linear infinite;
+    }
+    .ring-outer::before {
+      content: '';
+      position: absolute;
+      top: -2px; left: 28px;
+      width: 7px; height: 7px;
+      background: #3a7bd5;
+      border-radius: 50%;
+    }
+    @keyframes rot { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+    canvas#spec {
+      position: absolute;
+      width: 176px;
+      height: 176px;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .core-ring {
+      position: absolute;
+      width: 136px;
+      height: 136px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(58,123,213,.4);
+    }
+
+    .core-btn {
+      position: relative;
+      width: 94px;
+      height: 94px;
+      border-radius: 50%;
+      background: #040e1f;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 3px;
+      transition: all .2s;
+      z-index: 10;
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden;
+    }
+    .core-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 1.5px solid #1e64c8;
+      transition: border-color .2s;
+    }
+    .core-btn:disabled { opacity: .4; cursor: default; }
+    .core-btn.listening::before { border-color: #5af0a8; }
+    .core-btn.processing::before { border-color: #f0a05a; animation: pp 1s ease-in-out infinite; }
+    .core-btn.speaking::before { border-color: #5aa8f0; }
+    @keyframes pp { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+
+    .c-icon { font-size: 22px; line-height: 1; position: relative; z-index: 1; }
+    .c-lbl {
+      font-family: 'Orbitron', monospace;
+      font-size: 7px;
+      letter-spacing: .15em;
+      color: #3a7bd5;
+      text-transform: uppercase;
+      position: relative;
+      z-index: 1;
+    }
+    .core-btn.listening .c-lbl { color: #5af0a8; }
+    .core-btn.processing .c-lbl { color: #f0a05a; }
+    .core-btn.speaking .c-lbl { color: #5aa8f0; }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #2a5090;
+      flex-shrink: 0;
+      transition: background .3s;
+    }
+    .dot.on { background: #5af0a8; }
+    .dot.proc { background: #f0a05a; }
+    .dot.speak { background: #5aa8f0; animation: blink .8s ease-in-out infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+    .stat-txt {
+      font-size: 10px;
+      letter-spacing: .15em;
+      color: #2a5090;
+      text-transform: uppercase;
+      flex: 1;
+    }
+
+    .vol { display: flex; gap: 2px; align-items: flex-end; height: 16px; }
+    .vb { width: 3px; background: rgba(30,100,200,.25); border-radius: 1px; transition: height .05s; min-height: 2px; }
+
+    .interim {
+      font-size: 11px;
+      color: #2a5090;
+      text-align: center;
+      min-height: 16px;
+      letter-spacing: .08em;
+      font-style: italic;
+      width: 100%;
+    }
+
+    .transcript {
+      width: 100%;
+      background: rgba(5,20,50,.7);
+      border: .5px solid rgba(30,100,200,.2);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 70px;
+      max-height: 180px;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #5080a0;
+    }
+    .transcript:empty::before { content: 'Awaiting voice input...'; color: #1a3060; font-style: italic; }
+
+    .mu::before { content: 'YOU › '; color: #3a7bd5; font-size: 9px; letter-spacing: .2em; }
+    .mu { color: #7ab0e0; margin-bottom: 6px; }
+    .ma::before { content: 'JARVIS › '; color: #5af0a8; font-size: 9px; letter-spacing: .2em; }
+    .ma { color: #a8d4f5; margin-bottom: 10px; }
+
+    .btns {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      width: 100%;
+    }
+    .cb {
+      background: rgba(5,20,50,.8);
+      border: .5px solid rgba(30,100,200,.3);
+      border-radius: 8px;
+      color: #3a7bd5;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 12px 6px;
+      cursor: pointer;
+      transition: all .2s;
+      -webkit-tap-highlight-color: transparent;
+      text-align: center;
+    }
+    .cb:active { background: rgba(30,100,200,.15); }
+    .cb.red { border-color: rgba(200,60,60,.35); color: #a03030; }
+    .cb.red:active { background: rgba(200,60,60,.1); }
+    .cb.active-btn { border-color: rgba(58,123,213,.6); color: #5a9ae8; background: rgba(20,60,140,.3); }
+
+    .corner { position: fixed; width: 28px; height: 28px; border-color: rgba(30,100,200,.22); border-style: solid; }
+    .ctl { top: 12px; left: 12px; border-width: 1px 0 0 1px; }
+    .ctr { top: 12px; right: 12px; border-width: 1px 1px 0 0; }
+    .cbl { bottom: 12px; left: 12px; border-width: 0 0 1px 1px; }
+    .cbr { bottom: 12px; right: 12px; border-width: 0 1px 1px 0; }
+
+    .settings-panel {
+      width: 100%;
+      background: rgba(3,14,38,.95);
+      border: .5px solid rgba(30,100,200,.25);
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .panel-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 9px;
+      letter-spacing: .35em;
+      color: #2a5a9a;
+      text-transform: uppercase;
+      border-bottom: .5px solid rgba(30,100,200,.15);
+      padding-bottom: 10px;
+    }
+    .setting-row { display: flex; flex-direction: column; gap: 5px; }
+    .setting-row label {
+      font-size: 10px;
+      letter-spacing: .15em;
+      color: #2a6090;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .setting-row label span { color: #5a9ae8; font-size: 11px; }
+    .setting-row select {
+      width: 100%;
+      background: rgba(5,20,50,.9);
+      border: .5px solid rgba(30,100,200,.3);
+      border-radius: 6px;
+      color: #8ab8e8;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      padding: 10px;
+      outline: none;
+      cursor: pointer;
+      -webkit-appearance: none;
+    }
+    .setting-row select option { background: #060f28; }
+
+    .slider-track {
+      width: 100%;
+      height: 3px;
+      background: rgba(30,100,200,.2);
+      border-radius: 2px;
+      position: relative;
+      cursor: pointer;
+    }
+    .slider-fill { height: 100%; background: #1e64c8; border-radius: 2px; }
+    .slider-thumb {
+      width: 16px; height: 16px;
+      background: #3a7bd5;
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      cursor: grab;
+      transition: background .2s;
+    }
+    .slider-thumb:active { cursor: grabbing; background: #5a9ae8; }
+
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; }
+    .toggle-row label { font-size: 10px; letter-spacing: .15em; color: #2a6090; text-transform: uppercase; }
+    .toggle {
+      width: 42px; height: 22px;
+      background: rgba(30,100,200,.15);
+      border: .5px solid rgba(30,100,200,.3);
+      border-radius: 11px;
+      position: relative;
+      cursor: pointer;
+      transition: background .2s;
+      flex-shrink: 0;
+    }
+    .toggle.on { background: rgba(30,100,200,.4); border-color: rgba(58,123,213,.6); }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 16px; height: 16px;
+      background: #1e4080;
+      border-radius: 50%;
+      top: 2px; left: 2px;
+      transition: left .2s, background .2s;
+    }
+    .toggle.on::after { left: 22px; background: #3a7bd5; }
+
+    .divider { height: .5px; background: rgba(30,100,200,.12); width: 100%; }
+
+    @media (min-width: 480px) {
+      .hdr-title { font-size: 30px; }
+      .orb-wrap { width: 240px; height: 240px; }
+      .ring-outer { width: 224px; height: 224px; }
+      canvas#spec { width: 200px; height: 200px; }
+      .core-ring { width: 156px; height: 156px; }
+      .core-btn { width: 108px; height: 108px; }
+      .c-icon { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="corner ctl"></div>
+<div class="corner ctr"></div>
+<div class="corner cbl"></div>
+<div class="corner cbr"></div>
+
+<div class="wrap">
+
+  <div class="hdr">
+    <div class="hdr-sub">Powered by Anthropic</div>
+    <div class="hdr-title">J.A.R.V.I.S</div>
+  </div>
+
+  <div class="api-wrap" id="apiWrap">
+    <input class="api-input" id="apiKey" type="password" placeholder="Anthropic API key  (sk-ant-...)" autocomplete="off" />
+    <button class="api-btn" onclick="saveKey()">Initialize System</button>
+  </div>
+  <div class="note" id="note">Enter your API key to activate the voice interface</div>
+
+  <div class="orb-wrap">
+    <div class="ring-outer"></div>
+    <canvas id="spec" width="176" height="176"></canvas>
+    <div class="core-ring"></div>
+    <button class="core-btn" id="cbtn" onclick="toggleListen()" disabled>
+      <span class="c-icon" id="cicon">🎙</span>
+      <span class="c-lbl" id="clbl">Offline</span>
+    </button>
+  </div>
+
+  <div class="status-row">
+    <div class="dot" id="sdot"></div>
+    <span class="stat-txt" id="stxt">Offline</span>
+    <div class="vol">
+      <div class="vb" style="height:2px"></div>
+      <div class="vb" style="height:2px"></div>
+      <div class="vb" style="height:2px"></div>
+      <div class="vb" style="height:2px"></div>
+      <div class="vb" style="height:2px"></div>
+      <div class="vb" style="height:2px"></div>
+    </div>
+  </div>
+
+  <div class="interim" id="interim"></div>
+  <div class="transcript" id="log"></div>
+
+  <div class="btns">
+    <button class="cb" onclick="clearLog()">Clear log</button>
+    <button class="cb" id="settingsBtn" onclick="toggleSettings()">Settings</button>
+    <button class="cb red" onclick="stopAll()">Stop</button>
+  </div>
+
+  <div class="settings-panel" id="settingsPanel" style="display:none">
+    <div class="panel-title">Voice Settings</div>
+
+    <div class="setting-row">
+      <label>Voice <span id="voiceNameDisplay">—</span></label>
+      <select id="voiceSelect" onchange="applyVoice()"></select>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="setting-row">
+      <label>Speech rate <span id="rateVal">1.0×</span></label>
+      <div class="slider-track" id="rateTrack">
+        <div class="slider-fill" id="rateFill" style="width:33%"></div>
+        <div class="slider-thumb" id="rateThumb" style="left:33%"></div>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <label>Pitch <span id="pitchVal">0.9</span></label>
+      <div class="slider-track" id="pitchTrack">
+        <div class="slider-fill" id="pitchFill" style="width:40%"></div>
+        <div class="slider-thumb" id="pitchThumb" style="left:40%"></div>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <label>Silence threshold <span id="silVal">1.8s</span></label>
+      <div class="slider-track" id="silTrack">
+        <div class="slider-fill" id="silFill" style="width:37%"></div>
+        <div class="slider-thumb" id="silThumb" style="left:37%"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="setting-row">
+      <label>Recognition language</label>
+      <select id="langSelect" onchange="applyLang()">
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="da-DK">Danish</option>
+        <option value="de-DE">German</option>
+        <option value="fr-FR">French</option>
+        <option value="es-ES">Spanish</option>
+        <option value="nl-NL">Dutch</option>
+        <option value="sv-SE">Swedish</option>
+        <option value="nb-NO">Norwegian</option>
+      </select>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="toggle-row">
+      <label>Text-to-speech</label>
+      <div class="toggle on" id="ttsToggle" onclick="toggleTTS()"></div>
+    </div>
+
+    <div class="toggle-row">
+      <label>Auto-listen after response</label>
+      <div class="toggle" id="autoToggle" onclick="toggleAuto()"></div>
+    </div>
+
+    <div class="toggle-row">
+      <label>Show interim transcript</label>
+      <div class="toggle on" id="interimToggle" onclick="toggleInterim()"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let key = '', listening = false, processing = false, speaking = false;
+  let stream = null, actx = null, analyser = null, recog = null;
+  let history = [], silTimer = null, vadOn = false;
+  let settings = { rate: 1.0, pitch: 0.9, silence: 1800, lang: 'en-US', tts: true, autoListen: false, showInterim: true };
+  let allVoices = [], selectedVoice = null;
+
+  function saveKey() {
+    const v = document.getElementById('apiKey').value.trim();
+    if (!v.startsWith('sk-')) { setNote('Invalid key — must start with sk-', 'err'); return; }
+    key = v;
+    document.getElementById('apiWrap').style.display = 'none';
+    setNote('System online. Tap orb to speak.', 'ok');
+    document.getElementById('cbtn').disabled = false;
+    setStatus('standby', 'Ready — tap orb');
+    initAudio(); populateVoices();
+  }
+
+  function initAudio() {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = actx.createAnalyser(); analyser.fftSize = 256;
+    drawSpec();
+  }
+
+  function populateVoices() {
+    const load = () => {
+      allVoices = window.speechSynthesis.getVoices();
+      const sel = document.getElementById('voiceSelect');
+      sel.innerHTML = '';
+      allVoices.forEach((v, i) => {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = v.name + ' (' + v.lang + ')';
+        sel.appendChild(o);
+      });
+      const pref = allVoices.findIndex(v =>
+        v.name.includes('Daniel') || v.name.includes('Google UK') ||
+        v.name.includes('David') || v.name.includes('Alex'));
+      if (pref > -1) { sel.value = pref; selectedVoice = allVoices[pref]; }
+      else if (allVoices.length > 0) { selectedVoice = allVoices[0]; }
+      updateVoiceDisplay();
+    };
+    if (window.speechSynthesis.getVoices().length > 0) load();
+    window.speechSynthesis.onvoiceschanged = load;
+  }
+
+  function applyVoice() {
+    const i = parseInt(document.getElementById('voiceSelect').value);
+    selectedVoice = allVoices[i]; updateVoiceDisplay();
+  }
+  function updateVoiceDisplay() {
+    if (selectedVoice) document.getElementById('voiceNameDisplay').textContent =
+      selectedVoice.name.split(' ').slice(0, 2).join(' ');
+  }
+  function applyLang() {
+    settings.lang = document.getElementById('langSelect').value;
+    if (recog) recog.lang = settings.lang;
+  }
+
+  function toggleSettings() {
+    const p = document.getElementById('settingsPanel');
+    const b = document.getElementById('settingsBtn');
+    const show = p.style.display === 'none';
+    p.style.display = show ? 'flex' : 'none';
+    b.className = show ? 'cb active-btn' : 'cb';
+    if (show) populateVoices();
+  }
+  function toggleTTS() { const t = document.getElementById('ttsToggle'); settings.tts = !settings.tts; t.className = 'toggle' + (settings.tts ? ' on' : ''); }
+  function toggleAuto() { const t = document.getElementById('autoToggle'); settings.autoListen = !settings.autoListen; t.className = 'toggle' + (settings.autoListen ? ' on' : ''); }
+  function toggleInterim() {
+    const t = document.getElementById('interimToggle'); settings.showInterim = !settings.showInterim;
+    t.className = 'toggle' + (settings.showInterim ? ' on' : '');
+    if (!settings.showInterim) document.getElementById('interim').textContent = '';
+  }
+
+  function initSlider(trackId, fillId, thumbId, min, max, cb) {
+    const track = document.getElementById(trackId);
+    const fill = document.getElementById(fillId);
+    const thumb = document.getElementById(thumbId);
+    function update(clientX) {
+      const rect = track.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      fill.style.width = (pct * 100) + '%';
+      thumb.style.left = (pct * 100) + '%';
+      cb(min + (max - min) * pct, pct);
+    }
+    let drag = false;
+    thumb.addEventListener('touchstart', e => { drag = true; e.preventDefault(); }, { passive: false });
+    document.addEventListener('touchmove', e => { if (drag) update(e.touches[0].clientX); }, { passive: true });
+    document.addEventListener('touchend', () => drag = false);
+    thumb.addEventListener('mousedown', () => drag = true);
+    document.addEventListener('mousemove', e => { if (drag) update(e.clientX); });
+    document.addEventListener('mouseup', () => drag = false);
+    track.addEventListener('click', e => update(e.clientX));
+  }
+
+  initSlider('rateTrack', 'rateFill', 'rateThumb', 0.5, 2.0, (v) => {
+    settings.rate = +v.toFixed(1);
+    document.getElementById('rateVal').textContent = settings.rate.toFixed(1) + '×';
+  });
+  initSlider('pitchTrack', 'pitchFill', 'pitchThumb', 0.5, 1.5, (v) => {
+    settings.pitch = +v.toFixed(2);
+    document.getElementById('pitchVal').textContent = settings.pitch.toFixed(1);
+  });
+  initSlider('silTrack', 'silFill', 'silThumb', 0.5, 4.0, (v) => {
+    settings.silence = Math.round(v * 1000);
+    document.getElementById('silVal').textContent = v.toFixed(1) + 's';
+  });
+
+  async function startMic() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const src = actx.createMediaStreamSource(stream);
+      src.connect(analyser); return true;
+    } catch (e) { setStatus('error', 'Mic access denied'); return false; }
+  }
+  function stopMic() { if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } }
+
+  function toggleListen() {
+    if (speaking) { stopSpeech(); return; }
+    if (listening || processing) { stopAll(); return; }
+    startListening();
+  }
+
+  async function startListening() {
+    if (!key) return;
+    const ok = await startMic(); if (!ok) return;
+    listening = true; setStatus('listening', 'Listening...'); setBtnState('listening', '🎙', 'Active');
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setStatus('error', 'Use Chrome or Safari'); return; }
+    recog = new SR(); recog.continuous = true; recog.interimResults = true; recog.lang = settings.lang;
+    let final = '';
+    recog.onresult = (e) => {
+      vadOn = true; clearTimeout(silTimer);
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
+        else interim = e.results[i][0].transcript;
+      }
+      if (settings.showInterim) document.getElementById('interim').textContent = interim ? '› ' + interim : '';
+      silTimer = setTimeout(() => {
+        if (final.trim()) {
+          const t = final.trim(); final = ''; vadOn = false;
+          recog.stop(); listening = false;
+          document.getElementById('interim').textContent = '';
+          processQuery(t);
+        }
+      }, settings.silence);
+    };
+    recog.onerror = (e) => { if (e.error !== 'aborted') { setStatus('error', e.error); listening = false; stopMic(); } };
+    recog.onend = () => { vadOn = false; if (listening) { try { recog.start(); } catch (e) {} } };
+    recog.start();
+  }
+
+  async function processQuery(text) {
+    processing = true; setStatus('processing', 'Thinking...'); setBtnState('processing', '⚙', 'Thinking');
+    stopMic(); addMsg('user', text); history.push({ role: 'user', content: text });
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 400,
+          system: 'You are J.A.R.V.I.S, a highly intelligent AI assistant. Be concise: 1-3 sentences unless asked for more. Lead with the answer. No filler.',
+          messages: history
+        })
+      });
+      const d = await r.json();
+      if (d.content && d.content[0]) {
+        const reply = d.content[0].text;
+        history.push({ role: 'assistant', content: reply });
+        addMsg('ai', reply);
+        if (settings.tts) speakReply(reply); else afterSpeak();
+      } else throw new Error(d.error?.message || 'No response');
+    } catch (e) { setStatus('error', 'API: ' + e.message); processing = false; setBtnState('standby', '🎙', 'Ready'); }
+  }
+
+  function speakReply(text) {
+    processing = false; speaking = true; setStatus('speaking', 'Speaking...'); setBtnState('speaking', '🔊', 'Speaking');
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = settings.rate; u.pitch = settings.pitch; u.volume = 1;
+    if (selectedVoice) u.voice = selectedVoice;
+    u.onend = () => { speaking = false; afterSpeak(); };
+    window.speechSynthesis.speak(u);
+  }
+
+  function afterSpeak() {
+    if (settings.autoListen) { setStatus('listening', 'Auto-listening...'); setBtnState('listening', '🎙', 'Active'); startListening(); }
+    else { setStatus('standby', 'Ready — tap orb'); setBtnState('standby', '🎙', 'Ready'); }
+  }
+
+  function stopSpeech() {
+    window.speechSynthesis?.cancel(); speaking = false;
+    setStatus('standby', 'Ready — tap orb'); setBtnState('standby', '🎙', 'Ready');
+  }
+
+  function stopAll() {
+    window.speechSynthesis?.cancel(); recog?.stop(); clearTimeout(silTimer);
+    listening = false; processing = false; speaking = false; vadOn = false; stopMic();
+    document.getElementById('interim').textContent = '';
+    setStatus('standby', 'Standby — tap orb'); setBtnState('standby', '🎙', 'Ready');
+  }
+
+  function setStatus(state, text) {
+    const d = document.getElementById('sdot'), s = document.getElementById('stxt');
+    d.className = 'dot';
+    if (state === 'listening') d.classList.add('on');
+    if (state === 'processing') d.classList.add('proc');
+    if (state === 'speaking') d.classList.add('speak');
+    s.textContent = text;
+  }
+  function setBtnState(state, icon, label) {
+    const b = document.getElementById('cbtn');
+    b.className = 'core-btn'; if (state !== 'standby') b.classList.add(state);
+    document.getElementById('cicon').textContent = icon;
+    document.getElementById('clbl').textContent = label;
+  }
+  function setNote(t, cls) { const n = document.getElementById('note'); n.textContent = t; n.className = 'note' + (cls ? ' ' + cls : ''); }
+  function addMsg(role, text) {
+    const p = document.getElementById('log');
+    const d = document.createElement('div'); d.className = role === 'user' ? 'mu' : 'ma'; d.textContent = text;
+    p.appendChild(d); p.scrollTop = p.scrollHeight;
+  }
+  function clearLog() { document.getElementById('log').innerHTML = ''; history = []; }
+
+  function drawSpec() {
+    const c = document.getElementById('spec'), ctx = c.getContext('2d');
+    const W = c.width, H = c.height, cx = W / 2, cy = H / 2, r = cx * 0.82;
+    function frame() {
+      requestAnimationFrame(frame); ctx.clearRect(0, 0, W, H);
+      let da = new Uint8Array(analyser ? analyser.frequencyBinCount : 64);
+      if (analyser) analyser.getByteFrequencyData(da);
+      const bars = 54, as = (Math.PI * 2) / bars;
+      for (let i = 0; i < bars; i++) {
+        const val = analyser ? (da[i] || 0) : 0;
+        let amp = (val / 255) * 32;
+        if (speaking) amp = 6 + Math.sin(Date.now() * .004 + i * .4) * 12 + Math.random() * 4;
+        else if (processing) amp = 3 + Math.sin(Date.now() * .006 + i * .3) * 7;
+        else if (!listening && !vadOn) amp = 1 + Math.sin(Date.now() * .001 + i * .5) * 1.2;
+        const angle = i * as - Math.PI / 2;
+        const x1 = cx + Math.cos(angle) * r, y1 = cy + Math.sin(angle) * r;
+        const x2 = cx + Math.cos(angle) * (r + amp), y2 = cy + Math.sin(angle) * (r + amp);
+        let hue = 210;
+        if (speaking) hue = 200 + (val / 255) * 20;
+        if (processing) hue = 30 + (i / bars) * 15;
+        if (listening || vadOn) hue = 155 + (val / 255) * 20;
+        ctx.strokeStyle = `hsla(${hue},88%,64%,${.28 + (amp / 32) * .72})`;
+        ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+    }
+    frame();
+  }
+</script>
+</body>
+</html>
